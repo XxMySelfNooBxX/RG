@@ -14,15 +14,15 @@ export const App: React.FC = () => {
     const [backstoryOpen, setBackstoryOpen] = useState(false);
     
     // UI States
+    const [gameState, setGameState] = useState<'loading' | 'playing' | 'postgame'>('loading');
     const [showResultPanel, setShowResultPanel] = useState(false);
-    const [showLeaderboard, setShowLeaderboard] = useState(false);
     const [newCaseAvailable, setNewCaseAvailable] = useState(false);
     
     // Data States
     const [postGameData, setPostGameData] = useState<any>(null);
 
     // Fetch user's theory for today's case
-    const { data: submissionData, isSuccess: theorySuccess, isFetched: theoryFetched } = trpc.getTheory.useQuery({ caseId: dailyCase.id });
+    const { data: submissionData, isSuccess: theorySuccess } = trpc.getTheory.useQuery({ caseId: dailyCase.id });
     const { data: progressData, isSuccess: progressSuccess } = trpc.getPlayerProgress.useQuery(undefined, {
         enabled: theorySuccess && !!submissionData
     });
@@ -51,7 +51,9 @@ export const App: React.FC = () => {
                 });
                 
                 // Enter post-game state
-                setShowLeaderboard(true);
+                setGameState('postgame');
+            } else {
+                setGameState('playing');
             }
         };
 
@@ -97,12 +99,12 @@ export const App: React.FC = () => {
             connections 
         });
 
+        setGameState('postgame');
         setShowResultPanel(true);
     };
 
     const handleCloseResultPanel = () => {
         setShowResultPanel(false);
-        setShowLeaderboard(true);
     };
 
     return (
@@ -148,7 +150,7 @@ export const App: React.FC = () => {
             </div>
 
             {/* UI Overlays */}
-            {theoryFetched && !postGameData && (
+            {gameState === 'playing' && (
                 <TheoryPanel 
                     caseId={dailyCase.id} 
                     connections={connections} 
@@ -156,7 +158,7 @@ export const App: React.FC = () => {
                 />
             )}
 
-            {showLeaderboard && (
+            {gameState === 'postgame' && (
                 <LeaderboardPanel 
                     caseId={dailyCase.id} 
                     onViewResults={() => setShowResultPanel(true)} 
