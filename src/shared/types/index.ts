@@ -1,24 +1,21 @@
+export type ClueType = 'image' | 'text' | 'audio';
+
 export type Clue = {
   id: string;
   title: string;
-  description: string;
-  image?: string;
-  found: boolean;
+  type: ClueType;
+  content: string;
 };
 
-export type Suspect = {
-  id: string;
-  name: string;
-  description: string;
-  image?: string;
-  status: 'innocent' | 'suspect' | 'guilty';
-};
-
-export type CaseTemplate = {
+export type Case = {
   id: string;
   title: string;
-  description: string;
-  difficulty: 'easy' | 'medium' | 'hard';
+  backstory: string;
+  solution: string;
+  evidenceClueIds: string[];
   clues: Clue[];
-  suspects: Suspect[];
+};
+
+export type DailyCase = Case & {
+  dayNumber: number;
 };

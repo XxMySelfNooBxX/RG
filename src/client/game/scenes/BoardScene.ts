@@ -1,11 +1,11 @@
 import Phaser, { Scene } from 'phaser';
 import { EventBus } from '../EventBus';
-import { CaseTemplate } from '../../../shared/types';
+import { DailyCase, ClueType } from '../../../shared/types';
 
 type CardNode = {
     id: string;
     title: string;
-    type: 'clue' | 'suspect';
+    type: ClueType;
 };
 
 type Connection = {
@@ -115,31 +115,38 @@ export class BoardScene extends Scene {
         });
 
         // EventBus handshake listeners
-        const handleCaseLoaded = (caseData: CaseTemplate) => {
+        const handleCaseLoaded = (caseData: DailyCase) => {
             this.spawnCards(caseData);
         };
         EventBus.on('case-loaded', handleCaseLoaded);
 
+        const handleRestore = (connections: Connection[]) => {
+            this.restoreConnections(connections);
+        };
+        EventBus.on('restore-connections', handleRestore);
+
         // Clean up EventBus listeners on scene shutdown
         this.events.on('shutdown', () => {
             EventBus.off('case-loaded', handleCaseLoaded);
+            EventBus.off('restore-connections', handleRestore);
         });
 
         // Signal to React wrapper that scene is ready to receive case data
         EventBus.emit('scene-ready');
     }
 
-    private spawnCards(caseData: CaseTemplate) {
+    private spawnCards(caseData: DailyCase) {
         // Clear current elements
         this.cards.forEach(card => card.destroy());
         this.cards.clear();
         this.connections = [];
         this.connectionsGraphics?.clear();
 
-        const nodes: CardNode[] = [
-            ...caseData.clues.map(c => ({ id: c.id, title: c.title, type: 'clue' as const })),
-            ...caseData.suspects.map(s => ({ id: s.id, title: s.name, type: 'suspect' as const }))
-        ];
+        const nodes: CardNode[] = caseData.clues.map(c => ({
+            id: c.id,
+            title: c.title,
+            type: c.type
+        }));
 
         const N = nodes.length;
         const centerX = 400;
@@ -170,11 +177,13 @@ export class BoardScene extends Scene {
         bg.setInteractive({ useHandCursor: true });
         this.input.setDraggable(bg);
 
-        // Header Title (Courier Prime)
-        const typeLabel = this.add.text(0, -32, node.type.toUpperCase(), {
-            fontFamily: '"Courier Prime", monospace',
-            fontSize: '10px',
-            color: node.type === 'clue' ? '#00ff88' : '#ff3366',
+        // Icon Header
+        let iconStr = '📝';
+        if (node.type === 'image') iconStr = '📸';
+        if (node.type === 'audio') iconStr = '🎙️';
+
+        const typeLabel = this.add.text(0, -30, iconStr, {
+            fontSize: '14px',
         }).setOrigin(0.5);
 
         // Content Text (JetBrains Mono)
@@ -280,7 +289,7 @@ export class BoardScene extends Scene {
                     clueA_id: this.sourceCardId,
                     clueB_id: targetCardId
                 });
-                EventBus.emit('connections-ready', this.connections);
+                EventBus.emit('connections-changed', this.connections);
             }
         }
 
@@ -309,8 +318,55 @@ export class BoardScene extends Scene {
 
         if (deleted) {
             this.drawConnections();
-            EventBus.emit('connections-ready', this.connections);
+            EventBus.emit('connections-changed', this.connections);
         }
+    }
+
+    public restoreConnections(savedConnections: Connection[]) {
+        this.connections = savedConnections;
+        this.drawConnections();
+    }
+
+    public validateConnections(evidenceClueIds: string[]): boolean {
+        if (evidenceClueIds.length === 0) return false;
+        
+        // Build adjacency list for current connections
+        const adj = new Map<string, string[]>();
+        for (const conn of this.connections) {
+            if (!adj.has(conn.clueA_id)) adj.set(conn.clueA_id, []);
+            if (!adj.has(conn.clueB_id)) adj.set(conn.clueB_id, []);
+            adj.get(conn.clueA_id)!.push(conn.clueB_id);
+            adj.get(conn.clueB_id)!.push(conn.clueA_id);
+        }
+
+        // Check if all evidence clues are connected in a single component
+        const startNode = evidenceClueIds[0]!;
+        if (!adj.has(startNode)) return false;
+
+        const visited = new Set<string>();
+        const queue = [startNode];
+
+        while (queue.length > 0) {
+            const current = queue.shift()!;
+            if (!visited.has(current)) {
+                visited.add(current);
+                const neighbors = adj.get(current) || [];
+                for (const neighbor of neighbors) {
+                    if (!visited.has(neighbor)) {
+                        queue.push(neighbor);
+                    }
+                }
+            }
+        }
+
+        // If any evidence clue was not visited, it's not in the same connected graph
+        for (const id of evidenceClueIds) {
+            if (!visited.has(id)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private drawConnections() {
