@@ -1,0 +1,11 @@
+Always use TypeScript (strict mode)
+Always use React hooks (no class components)
+Always use Tailwind CSS for styling
+Always use Phaser 3 for game scenes
+Always use Hono for backend routes
+Never use inline styles
+Never use template colors/themes (always specify: #0a0e27, #00ff88, etc.)
+Font: JetBrains Mono for code, Courier Prime for display
+Borders: 0.5px solid, no rounded corners (brutalist)
+Project structure: src/game, src/components, src/api, src/data, src/types
+Tests: Always include "Test: ..." line at end of phase spec
