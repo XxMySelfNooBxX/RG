@@ -6,7 +6,7 @@ export const cases: Case[] = [
         title: "The Midnight Sonata",
         backstory: "Concert pianist Julian Vane was found unconscious in his locked studio. The only sounds from the room were the dissonant chords of his unfinished masterpiece, echoing into the night.",
         solution: "The blackmailer used a modified tuning fork (TF-88) to emit a lethal frequency that triggered a hidden tranquilizer mechanism in the piano. The 200 BPM tempo on the sheet music was the activation signal.",
-        evidenceClueIds: ["clue-4", "clue-5"],
+        evidenceClueIds: ["clue-1", "clue-4", "clue-5"],
         clues: [
             {
                 id: "clue-1",

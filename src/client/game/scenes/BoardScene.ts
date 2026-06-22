@@ -6,6 +6,7 @@ type CardNode = {
     id: string;
     title: string;
     type: ClueType;
+    content: string;
 };
 
 type Connection = {
@@ -33,6 +34,8 @@ export class BoardScene extends Scene {
     private previewLine: Phaser.GameObjects.Graphics | null = null;
     private connectionsGraphics: Phaser.GameObjects.Graphics | null = null;
     private uiHintText: Phaser.GameObjects.Text | null = null;
+    private currentTooltip: Phaser.GameObjects.Container | null = null;
+    private tooltipTimer: Phaser.Time.TimerEvent | null = null;
 
     constructor() {
         super('BoardScene');
@@ -107,10 +110,17 @@ export class BoardScene extends Scene {
             }
         });
 
-        // Right-click deletion listener
-        this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+        // Right-click deletion listener and tooltip clearing
+        this.input.on('pointerdown', (pointer: Phaser.Input.Pointer, currentlyOver: Phaser.GameObjects.GameObject[]) => {
             if (pointer.rightButtonDown()) {
                 this.handleRightClickDelete(pointer.worldX, pointer.worldY);
+            }
+            if (this.currentTooltip) {
+                const isOverCard = currentlyOver.some(obj => obj.getData && obj.getData('isCardBackground'));
+                if (!isOverCard) {
+                    this.currentTooltip.destroy();
+                    this.currentTooltip = null;
+                }
             }
         });
 
@@ -145,7 +155,8 @@ export class BoardScene extends Scene {
         const nodes: CardNode[] = caseData.clues.map(c => ({
             id: c.id,
             title: c.title,
-            type: c.type
+            type: c.type,
+            content: c.content || ''
         }));
 
         const N = nodes.length;
@@ -219,6 +230,13 @@ export class BoardScene extends Scene {
             bg.setStrokeStyle(0.5, 0x00ff88, 0.8);
         });
 
+        // Tooltip on click
+        bg.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+            if (!pointer.rightButtonDown()) {
+                this.showTooltip(node, x, y);
+            }
+        });
+
         // String drawing start handlers
         pin.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
             if (pointer.leftButtonDown()) {
@@ -228,6 +246,47 @@ export class BoardScene extends Scene {
 
         container.add([bg, typeLabel, contentText, pin]);
         this.cards.set(node.id, container);
+    }
+
+    private showTooltip(node: CardNode, x: number, y: number) {
+        if (this.currentTooltip) {
+            this.currentTooltip.destroy();
+            this.currentTooltip = null;
+        }
+        if (this.tooltipTimer) {
+            this.tooltipTimer.remove();
+            this.tooltipTimer = null;
+        }
+
+        const width = 220;
+        const container = this.add.container(x, y - 80); // Offset above the card
+        container.setDepth(100); // Render above strings and pins
+
+        let iconStr = '📝';
+        if (node.type === 'image') iconStr = '📸';
+        if (node.type === 'audio') iconStr = '🎙️';
+
+        const contentText = this.add.text(0, 0, `${iconStr} ${node.title}\n\n${node.content}`, {
+            fontFamily: '"JetBrains Mono", monospace',
+            fontSize: '11px',
+            color: '#00ff88',
+            align: 'left',
+            wordWrap: { width: width - 20, useAdvancedWrap: true }
+        }).setOrigin(0.5);
+
+        const bounds = contentText.getBounds();
+        const bg = this.add.rectangle(0, 0, bounds.width + 16, bounds.height + 16, 0x0a0e27);
+        bg.setStrokeStyle(1, 0x00ff88, 1);
+        
+        container.add([bg, contentText]);
+        this.currentTooltip = container;
+
+        this.tooltipTimer = this.time.delayedCall(3000, () => {
+            if (this.currentTooltip) {
+                this.currentTooltip.destroy();
+                this.currentTooltip = null;
+            }
+        });
     }
 
     private startDrawingString(cardId: string) {
