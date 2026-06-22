@@ -36,6 +36,7 @@ export class BoardScene extends Scene {
     private uiHintText: Phaser.GameObjects.Text | null = null;
     private currentTooltip: Phaser.GameObjects.Container | null = null;
     private tooltipTimer: Phaser.Time.TimerEvent | null = null;
+    private isFrozen: boolean = false;
 
     constructor() {
         super('BoardScene');
@@ -68,6 +69,7 @@ export class BoardScene extends Scene {
 
         // Global pointer drag handling
         this.input.on('dragstart', (pointer: Phaser.Input.Pointer, gameObject: Phaser.GameObjects.GameObject) => {
+            if (this.isFrozen) return;
             if (gameObject.getData('isCardBackground')) {
                 const container = gameObject.parentContainer;
                 if (container) {
@@ -80,6 +82,7 @@ export class BoardScene extends Scene {
         });
 
         this.input.on('drag', (pointer: Phaser.Input.Pointer, gameObject: Phaser.GameObjects.GameObject) => {
+            if (this.isFrozen) return;
             if (gameObject.getData('isCardBackground')) {
                 const container = gameObject.parentContainer;
                 if (container) {
@@ -135,10 +138,16 @@ export class BoardScene extends Scene {
         };
         EventBus.on('restore-connections', handleRestore);
 
+        const handleShowResults = ({ evidenceClueIds, connections }: { evidenceClueIds: string[], connections: Connection[] }) => {
+            this.highlightEvidenceConnections(evidenceClueIds, connections);
+        };
+        EventBus.on('show-results', handleShowResults);
+
         // Clean up EventBus listeners on scene shutdown
         this.events.on('shutdown', () => {
             EventBus.off('case-loaded', handleCaseLoaded);
             EventBus.off('restore-connections', handleRestore);
+            EventBus.off('show-results', handleShowResults);
         });
 
         // Signal to React wrapper that scene is ready to receive case data
@@ -290,6 +299,7 @@ export class BoardScene extends Scene {
     }
 
     private startDrawingString(cardId: string) {
+        if (this.isFrozen) return;
         this.isDrawingString = true;
         this.sourceCardId = cardId;
     }
@@ -357,6 +367,7 @@ export class BoardScene extends Scene {
     }
 
     private handleRightClickDelete(x: number, y: number) {
+        if (this.isFrozen) return;
         let deleted = false;
 
         for (let i = this.connections.length - 1; i >= 0; i--) {
@@ -379,6 +390,65 @@ export class BoardScene extends Scene {
             this.drawConnections();
             EventBus.emit('connections-changed', this.connections);
         }
+    }
+
+    private evidenceClueIds: string[] | null = null;
+    private missedEvidenceTweens: Phaser.Tweens.Tween[] = [];
+
+    public freezeBoard() {
+        this.isFrozen = true;
+        this.input.setDraggable(this.children.getChildren(), false);
+        this.uiHintText?.setText('BOARD LOCKED — REVIEW YOUR THEORY');
+        this.drawConnections();
+    }
+
+    public unfreezeBoard() {
+        this.isFrozen = false;
+        this.evidenceClueIds = null;
+        this.missedEvidenceTweens.forEach(t => t.stop());
+        this.missedEvidenceTweens = [];
+        this.cards.forEach(card => {
+            const bg = card.list.find(obj => obj.getData && obj.getData('isCardBackground')) as Phaser.GameObjects.Rectangle;
+            if (bg) {
+                bg.setStrokeStyle(0.5, 0x00ff88, 0.8);
+                bg.alpha = 1;
+            }
+        });
+        // Re-enable dragging for backgrounds
+        this.cards.forEach(card => {
+            const bg = card.list.find(obj => obj.getData && obj.getData('isCardBackground')) as Phaser.GameObjects.Rectangle;
+            if (bg) this.input.setDraggable(bg, true);
+        });
+        this.uiHintText?.setText('DRAG FROM RED PIN TO CONNECT | RIGHT-CLICK STRING TO DELETE');
+        this.drawConnections();
+    }
+
+    public highlightEvidenceConnections(evidenceClueIds: string[], playerConnections: Connection[]) {
+        this.evidenceClueIds = evidenceClueIds;
+        this.connections = playerConnections;
+        this.freezeBoard();
+
+        // Pulse unconnected evidence clues
+        evidenceClueIds.forEach(evId => {
+            const isConnected = playerConnections.some(conn => conn.clueA_id === evId || conn.clueB_id === evId);
+            if (!isConnected) {
+                const card = this.cards.get(evId);
+                if (card) {
+                    const bg = card.list.find(obj => obj.getData && obj.getData('isCardBackground')) as Phaser.GameObjects.Rectangle;
+                    if (bg) {
+                        bg.setStrokeStyle(3, 0xff3366, 1);
+                        const tween = this.tweens.add({
+                            targets: bg,
+                            alpha: 0.5,
+                            yoyo: true,
+                            repeat: -1,
+                            duration: 800
+                        });
+                        this.missedEvidenceTweens.push(tween);
+                    }
+                }
+            }
+        });
     }
 
     public restoreConnections(savedConnections: Connection[]) {
@@ -446,18 +516,40 @@ export class BoardScene extends Scene {
                 const endY = cardB.y - 45;
 
                 const line = new Phaser.Geom.Line(startX, startY, endX, endY);
-                const distance = getDistanceToSegment(pointer.worldX, pointer.worldY, startX, startY, endX, endY);
+                let distance = 100; // default no hover if frozen
+                if (!this.isFrozen) {
+                    distance = getDistanceToSegment(pointer.worldX, pointer.worldY, startX, startY, endX, endY);
+                }
 
-                if (distance < 10) {
-                    // Glow connection string on hover
-                    this.connectionsGraphics!.lineStyle(5, 0x00ff88, 0.4);
-                    this.connectionsGraphics!.strokeLineShape(line);
-                    this.connectionsGraphics!.lineStyle(2, 0x00ff88, 1);
-                    this.connectionsGraphics!.strokeLineShape(line);
+                if (this.isFrozen && this.evidenceClueIds) {
+                    // Post-game highlight mode
+                    const isAEvidence = this.evidenceClueIds.includes(conn.clueA_id);
+                    const isBEvidence = this.evidenceClueIds.includes(conn.clueB_id);
+                    
+                    if (isAEvidence && isBEvidence) {
+                        // Correct: GOLD and glow
+                        this.connectionsGraphics!.lineStyle(5, 0xffd700, 0.6);
+                        this.connectionsGraphics!.strokeLineShape(line);
+                        this.connectionsGraphics!.lineStyle(2, 0xffd700, 1);
+                        this.connectionsGraphics!.strokeLineShape(line);
+                    } else {
+                        // Incorrect: RED, faded 30%
+                        this.connectionsGraphics!.lineStyle(2, 0xff3366, 0.3);
+                        this.connectionsGraphics!.strokeLineShape(line);
+                    }
                 } else {
-                    // Normal red detective string
-                    this.connectionsGraphics!.lineStyle(2, 0xff3366, 0.85);
-                    this.connectionsGraphics!.strokeLineShape(line);
+                    // Normal game mode
+                    if (distance < 10) {
+                        // Glow connection string on hover
+                        this.connectionsGraphics!.lineStyle(5, 0x00ff88, 0.4);
+                        this.connectionsGraphics!.strokeLineShape(line);
+                        this.connectionsGraphics!.lineStyle(2, 0x00ff88, 1);
+                        this.connectionsGraphics!.strokeLineShape(line);
+                    } else {
+                        // Normal red detective string
+                        this.connectionsGraphics!.lineStyle(2, 0xff3366, 0.85);
+                        this.connectionsGraphics!.strokeLineShape(line);
+                    }
                 }
             }
         });

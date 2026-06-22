@@ -1,6 +1,7 @@
 import { initTRPC, TRPCError } from '@trpc/server';
 import { cases } from '../shared/data/cases';
 import { Case } from '../shared/types';
+import { getRankProgress } from '../shared/utils/ranks';
 
 export type TRPCContext = {
   postId?: string;
@@ -147,7 +148,39 @@ export const appRouter = router({
       await ctx.redis.set(`theory:${input.caseId}:${username}`, JSON.stringify(submission));
       await ctx.redis.zAdd(`leaderboard:${input.caseId}`, { member: username, score: compositeScore });
 
-      return { success: true, score: displayScore, evidenceConnected: maxEvidenceConnected, totalEvidence: evidenceIds.size };
+      const casesSolvedStr = await ctx.redis.get(`player:${username}:casesSolved`);
+      let casesSolved = casesSolvedStr ? parseInt(casesSolvedStr, 10) : 0;
+      
+      if (displayScore > 0) {
+          casesSolved += 1;
+          await ctx.redis.set(`player:${username}:casesSolved`, casesSolved.toString());
+      }
+
+      const rankData = getRankProgress(casesSolved);
+
+      return { 
+          success: true, 
+          score: displayScore, 
+          evidenceConnected: maxEvidenceConnected, 
+          totalEvidence: evidenceIds.size,
+          rankData: {
+              casesSolved,
+              ...rankData
+          }
+      };
+    }),
+
+  getPlayerProgress: publicProcedure
+    .query(async ({ ctx }) => {
+      const username = ctx.username || 'anonymous';
+      const casesSolvedStr = await ctx.redis.get(`player:${username}:casesSolved`);
+      const casesSolved = casesSolvedStr ? parseInt(casesSolvedStr, 10) : 0;
+      
+      const rankData = getRankProgress(casesSolved);
+      return {
+          casesSolved,
+          ...rankData
+      };
     }),
 
   getTheory: publicProcedure

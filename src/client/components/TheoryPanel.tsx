@@ -4,32 +4,16 @@ import { trpc } from '../utils/trpc';
 type TheoryPanelProps = {
     caseId: string;
     connections: { clueA_id: string; clueB_id: string }[];
-    submissionData: any | null;
+    onSuccess: (data: any, theory: string) => void;
 };
 
-export const TheoryPanel: React.FC<TheoryPanelProps> = ({ caseId, connections, submissionData }) => {
+export const TheoryPanel: React.FC<TheoryPanelProps> = ({ caseId, connections, onSuccess }) => {
     const [theoryText, setTheoryText] = useState('');
-    const submitMutation = trpc.submitTheory.useMutation();
-
-    if (submissionData) {
-        return (
-            <div className="fixed bottom-0 left-0 w-full p-4 bg-[#0a0e27]/95 border-t border-[#00ff88] z-50 backdrop-blur-sm">
-                <div className="max-w-5xl mx-auto flex items-center justify-center font-mono text-[#00ff88] uppercase tracking-wider text-sm md:text-base font-bold">
-                    <span>✓ THEORY SUBMITTED — SCORE: {submissionData.score} — {submissionData.evidenceConnected}/{submissionData.totalEvidence} EVIDENCE CONNECTED</span>
-                </div>
-            </div>
-        );
-    }
-
-    if (submitMutation.isSuccess && submitMutation.data) {
-        return (
-            <div className="fixed bottom-0 left-0 w-full p-4 bg-[#0a0e27]/95 border-t border-[#00ff88] z-50 backdrop-blur-sm">
-                <div className="max-w-5xl mx-auto flex items-center justify-center font-mono text-[#00ff88] uppercase tracking-wider text-sm md:text-base font-bold">
-                    <span>✓ THEORY SUBMITTED — SCORE: {submitMutation.data.score} — {submitMutation.data.evidenceConnected}/{submitMutation.data.totalEvidence} EVIDENCE CONNECTED</span>
-                </div>
-            </div>
-        );
-    }
+    const submitMutation = trpc.submitTheory.useMutation({
+        onSuccess: (data) => {
+            onSuccess(data, theoryText);
+        }
+    });
 
     const connectionCount = connections.length;
     const isValid = theoryText.length >= 10 && connectionCount > 0;
