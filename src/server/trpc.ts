@@ -147,6 +147,7 @@ export const appRouter = router({
 
       await ctx.redis.set(`theory:${input.caseId}:${username}`, JSON.stringify(submission));
       await ctx.redis.zAdd(`leaderboard:${input.caseId}`, { member: username, score: compositeScore });
+      await ctx.redis.set(`leaderboard:display:${input.caseId}:${username}`, displayScore.toString());
 
       const casesSolvedStr = await ctx.redis.get(`player:${username}:casesSolved`);
       let casesSolved = casesSolvedStr ? parseInt(casesSolvedStr, 10) : 0;
@@ -204,24 +205,17 @@ export const appRouter = router({
     })
     .query(async ({ input, ctx }) => {
       const rawMembers = await ctx.redis.zRange(`leaderboard:${input.caseId}`, 0, 9, { reverse: true, by: 'rank' });
-      // If devvit redis zRange returns strings instead of objects, map them
       const members = Array.isArray(rawMembers) ? rawMembers : [];
       
-      const result = [];
-      for (const m of members) {
-          const username = typeof m === 'object' ? m.member : m;
-          const data = await ctx.redis.get(`theory:${input.caseId}:${username}`);
-          if (data) {
-              const parsed = JSON.parse(data);
-              result.push({
-                  username,
-                  theory: parsed.theory,
-                  score: parsed.score,
-                  timestamp: parsed.submittedAt
-              });
-          }
-      }
-      return result;
+      const results = await Promise.all(members.map(async (entry: any) => {
+          const username = typeof entry === 'object' ? entry.member : entry;
+          const displayScoreStr = await ctx.redis.get(`leaderboard:display:${input.caseId}:${username}`);
+          return {
+              username: username,
+              score: displayScoreStr ? parseInt(displayScoreStr, 10) : 0,
+          };
+      }));
+      return results;
     })
 });
 
