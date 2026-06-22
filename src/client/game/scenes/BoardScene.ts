@@ -397,7 +397,12 @@ export class BoardScene extends Scene {
 
     public freezeBoard() {
         this.isFrozen = true;
-        this.input.setDraggable(this.children.getChildren(), false);
+        this.cards.forEach(card => {
+            const bg = card.list.find(obj => obj.getData && obj.getData('isCardBackground')) as Phaser.GameObjects.Rectangle;
+            if (bg) {
+                this.input.setDraggable(bg, false);
+            }
+        });
         this.uiHintText?.setText('BOARD LOCKED — REVIEW YOUR THEORY');
         this.drawConnections();
     }
