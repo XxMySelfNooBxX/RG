@@ -41,6 +41,8 @@ export const ResultPanel: React.FC<ResultPanelProps> = ({
       const diff = nextCaseTimestamp - now;
       if (diff <= 0) {
         setTimeLeft('00:00:00');
+        clearInterval(timer);
+        return;
       } else {
         const hours = Math.floor(diff / (1000 * 60 * 60));
         const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
