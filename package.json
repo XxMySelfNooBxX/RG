@@ -26,7 +26,7 @@
     "@trpc/react-query": "^11.18.0",
     "@trpc/server": "^11.18.0",
     "devvit": "0.12.24",
-    "hono": "4.12.21",
+    "hono": "4.12.26",
     "phaser": "4.1.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
