@@ -1,12 +1,12 @@
 import React, { useEffect } from 'react';
 import { PhaserContainer } from './PhaserContainer';
 import { EventBus } from '../game/EventBus';
-import { CASE_TEMPLATES } from '../../shared/data/cases';
+import { getCaseForDate } from '../../shared/utils/date';
 
 export const App: React.FC = () => {
     useEffect(() => {
         const handleSceneReady = () => {
-            const defaultCase = CASE_TEMPLATES[0];
+            const defaultCase = getCaseForDate(new Date());
             if (defaultCase) {
                 EventBus.emit('case-loaded', defaultCase);
             }

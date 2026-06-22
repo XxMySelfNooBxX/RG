@@ -1,5 +1,5 @@
 import { DailyCase } from '../types';
-import { cases } from './cases';
+import { cases } from '../data/cases';
 
 export function getCaseForDate(currentDate: Date): DailyCase {
     const startDate = new Date('2026-06-17T00:00:00Z');
