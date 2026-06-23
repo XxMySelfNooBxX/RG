@@ -30,31 +30,43 @@ export const TheoryPanel: React.FC<TheoryPanelProps> = ({ caseId, connections, o
     };
 
     return (
-        <div className="fixed bottom-0 left-0 w-full p-4 bg-[#0a0e27]/95 border-t border-[#00ff88] z-50 backdrop-blur-sm">
-            <div className="max-w-5xl mx-auto flex flex-col md:flex-row gap-4 font-mono text-[#00ff88] uppercase tracking-wider text-sm">
-                <div className="flex flex-col justify-between w-full md:w-1/4 min-w-[200px]">
-                    <span className="mb-2 block font-bold">CONNECTIONS: {connectionCount}</span>
-                    <button 
-                        onClick={handleSubmit}
-                        disabled={!isValid || isPending}
-                        className="w-full border border-[#00ff88] px-4 py-2 hover:bg-[#00ff88] hover:text-[#0a0e27] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-[#00ff88] transition-colors rounded-none font-bold"
-                    >
-                        {isPending ? 'SUBMITTING...' : 'SUBMIT THEORY'}
-                    </button>
+        <div className="absolute bottom-0 left-0 w-full z-50 flex flex-col pointer-events-none">
+            {/* Theory Input & Connections Section (Pointer events enabled here) */}
+            <div className="w-full max-w-5xl mx-auto px-4 mb-4 flex flex-col md:flex-row justify-between items-end gap-4 pointer-events-auto">
+                <div className="bg-[var(--secondary-dark)] border-2 border-[var(--accent-primary)] rounded-md px-4 py-2 shadow-lg">
+                    <span className="font-bold text-[var(--accent-primary)] text-sm">CONNECTIONS: {connectionCount}</span>
                 </div>
-                <div className="w-full flex-1">
+                
+                <div className="flex w-full md:w-2/3 lg:w-1/2 bg-[var(--secondary-dark)] border-2 border-[var(--accent-primary)] rounded-md p-2 shadow-lg focus-within:border-[var(--accent-secondary)] focus-within:shadow-[0_0_12px_rgba(236,72,153,0.3)] transition-all">
                     <textarea 
                         value={theoryText}
                         onChange={(e) => setTheoryText(e.target.value)}
                         placeholder="What's your theory? Connect the clues..."
                         maxLength={280}
                         minLength={10}
-                        className="w-full h-full min-h-[80px] bg-transparent border border-[#00ff88] text-[#00ff88] p-2 focus:outline-none focus:ring-1 focus:ring-[#00ff88] resize-none"
+                        className="w-full min-h-[50px] bg-transparent text-[var(--text-secondary)] text-[13px] outline-none resize-none px-2"
                     />
+                    <button 
+                        onClick={handleSubmit}
+                        disabled={!isValid || isPending}
+                        className="ml-2 bg-[var(--accent-primary)] text-[var(--text-primary)] hover:bg-[var(--accent-secondary)] disabled:opacity-50 disabled:cursor-not-allowed rounded-md px-5 py-2 font-bold text-[12px] whitespace-nowrap transition-colors"
+                    >
+                        {isPending ? 'SUBMITTING...' : 'SUBMIT THEORY'}
+                    </button>
                 </div>
             </div>
+
+            {/* Fixed Footer Instructions */}
+            <div className="w-full h-[60px] bg-[var(--secondary-dark)] border-t border-[var(--accent-primary)] flex justify-center items-center pointer-events-auto">
+                <div className="text-[12px] text-[var(--text-secondary)] font-sans flex items-center gap-2">
+                    <span className="text-[var(--accent-secondary)]">DRAG FROM PINK PEG TO CONNECT</span>
+                    <span className="opacity-50">|</span>
+                    <span>RIGHT-CLICK STRING TO DELETE</span>
+                </div>
+            </div>
+
             {submitMutation.isError && (
-                <div className="max-w-5xl mx-auto mt-2 text-red-500 font-mono text-xs uppercase">
+                <div className="absolute bottom-[70px] right-4 bg-red-500 text-white text-xs px-3 py-1 rounded-md shadow-md">
                     Error submitting theory: {submitMutation.error.message}
                 </div>
             )}

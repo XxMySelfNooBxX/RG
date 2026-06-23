@@ -108,14 +108,14 @@ export const App: React.FC = () => {
     };
 
     return (
-        <div className="w-screen h-screen flex flex-col items-center p-4 bg-[#0a0e27] text-[#00ff88] font-mono relative overflow-hidden">
+        <div className="w-screen h-screen flex flex-col items-center p-4 bg-[var(--primary-dark)] text-[var(--text-primary)] font-sans relative overflow-hidden">
             {/* NEW CASE AVAILABLE Banner */}
             {newCaseAvailable && (
-                <div className="absolute top-0 left-0 w-full z-[100] bg-[#ff3366] text-[#0a0e27] py-2 flex justify-center items-center gap-4 font-bold font-display uppercase">
+                <div className="absolute top-0 left-0 w-full z-[100] bg-[var(--accent-primary)] text-[var(--text-primary)] py-2 flex justify-center items-center gap-4 font-bold uppercase">
                     <span>A NEW CASE HAS BEEN UNLOCKED.</span>
                     <button 
                         onClick={() => window.location.reload()}
-                        className="bg-[#0a0e27] text-[#ff3366] px-4 py-1 hover:bg-white hover:text-[#0a0e27] transition-colors"
+                        className="bg-[var(--secondary-dark)] text-[var(--accent-secondary)] px-4 py-1 hover:bg-[var(--accent-secondary)] hover:text-white transition-colors rounded-md"
                     >
                         LOAD NEW CASE
                     </button>
@@ -124,20 +124,20 @@ export const App: React.FC = () => {
 
             {/* Header Area */}
             <div className={`w-full max-w-5xl mb-4 flex flex-col gap-2 ${newCaseAvailable ? 'mt-8' : ''} z-10`}>
-                <h1 className="font-display text-2xl uppercase tracking-widest text-[#00ff88]">
+                <h1 className="text-2xl font-bold tracking-wide text-[var(--text-primary)]">
                     CASE #{dailyCase.dayNumber}: {dailyCase.title}
                 </h1>
                 
-                <div className="w-full border border-[#00ff88]">
+                <div className="w-full border border-[var(--accent-primary)] rounded-md overflow-hidden bg-[var(--secondary-dark)]">
                     <button 
-                        className="w-full text-left p-2 font-bold uppercase hover:bg-[#00ff88] hover:text-[#0a0e27] transition-colors flex justify-between"
+                        className="w-full text-left p-3 font-semibold uppercase hover:bg-[var(--accent-primary)] transition-colors flex justify-between"
                         onClick={() => setBackstoryOpen(!backstoryOpen)}
                     >
                         <span>📖 BACKSTORY</span>
                         <span>{backstoryOpen ? '[-]' : '[+]'}</span>
                     </button>
                     {backstoryOpen && (
-                        <div className="p-4 border-t border-[#00ff88] text-sm leading-relaxed">
+                        <div className="p-4 border-t border-[var(--accent-primary)] text-sm leading-relaxed text-[var(--text-secondary)]">
                             {dailyCase.backstory}
                         </div>
                     )}
@@ -145,7 +145,7 @@ export const App: React.FC = () => {
             </div>
 
             {/* Game Board */}
-            <div className="w-full max-w-5xl aspect-video border border-[#00ff88] relative bg-dark flex-shrink-0 z-0">
+            <div className="w-full max-w-5xl aspect-video border-modern rounded-md relative bg-[var(--primary-dark)] flex-shrink-0 z-0 overflow-hidden shadow-lg shadow-[var(--accent-primary)]/10">
                 <PhaserContainer />
             </div>
 

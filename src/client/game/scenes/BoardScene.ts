@@ -36,7 +36,6 @@ export class BoardScene extends Scene {
     private uiHintText: Phaser.GameObjects.Text | null = null;
     private currentTooltip: Phaser.GameObjects.Container | null = null;
     private currentPinTooltip: Phaser.GameObjects.Container | null = null;
-    private activeCardId: string | null = null;
     private isFrozen: boolean = false;
 
     constructor() {
@@ -53,15 +52,15 @@ export class BoardScene extends Scene {
         this.connectionsGraphics = this.add.graphics();
         this.previewLine = this.add.graphics();
 
-        // UI Hint Overlay (Brutalist style)
-        this.uiHintText = this.add.text(400, 560, 'DRAG FROM RED PIN TO CONNECT | RIGHT-CLICK STRING TO DELETE', {
-            fontFamily: '"Courier Prime", monospace',
+        // UI Hint Overlay
+        this.uiHintText = this.add.text(400, 560, 'DRAG FROM PINK PEG TO CONNECT | RIGHT-CLICK STRING TO DELETE', {
+            fontFamily: '"Inter", sans-serif',
             fontSize: '12px',
-            color: '#00ff88',
-            backgroundColor: '#0a0e27',
+            color: '#cbd5e1',
+            backgroundColor: '#1a1f2e',
             padding: { x: 10, y: 5 }
         }).setOrigin(0.5);
-        this.uiHintText.setStroke('#00ff88', 0.5);
+        this.uiHintText.setStroke('#6366f1', 0.5);
 
         // Clear existing state
         this.cards.forEach(card => card.destroy());
@@ -95,13 +94,15 @@ export class BoardScene extends Scene {
                     container.x = startX + (pointer.worldX - pStartX);
                     container.y = startY + (pointer.worldY - pStartY);
                     this.drawConnections();
-
-                    // Tooltip follows card
-                    const cardId = gameObject.getData('cardId');
-                    if (this.currentTooltip && this.activeCardId === cardId) {
-                        this.currentTooltip.x = container.x;
-                        this.currentTooltip.y = container.y - 50;
+                    
+                    // Card drag effects
+                    const bg = container.list.find(obj => obj.getData && obj.getData('isCardBackground')) as Phaser.GameObjects.Graphics;
+                    if (bg) {
+                        bg.lineStyle(2, 0xfbbf24, 1);
+                        bg.strokeRoundedRect(-80, -45, 160, 90, 6);
                     }
+                    container.setScale(1.02);
+                    container.setDepth(50);
                 }
             }
         });
@@ -115,10 +116,24 @@ export class BoardScene extends Scene {
         });
 
         // Global pointerup to finish drawing connections
-        this.input.on('pointerup', (pointer: Phaser.Input.Pointer) => {
+        this.input.on('pointerup', (pointer: Phaser.Input.Pointer, _currentlyOver: Phaser.GameObjects.GameObject[]) => {
             if (this.isDrawingString) {
                 this.finishDrawingString(pointer);
             }
+            
+            // Reset scale and depth after drag
+            this.cards.forEach(card => {
+                card.setScale(1);
+                card.setDepth(0);
+                const bg = card.list.find(obj => obj.getData && obj.getData('isCardBackground')) as Phaser.GameObjects.Graphics;
+                if (bg) {
+                    bg.clear();
+                    bg.fillStyle(0x1a1f2e, 1);
+                    bg.fillRoundedRect(-80, -45, 160, 90, 6);
+                    bg.lineStyle(2, 0x6366f1, 1);
+                    bg.strokeRoundedRect(-80, -45, 160, 90, 6);
+                }
+            });
         });
 
         // Right-click deletion listener
@@ -172,7 +187,7 @@ export class BoardScene extends Scene {
         const N = nodes.length;
         const centerX = 400;
         const centerY = 400; // Updated Center Y
-        const radius = 180; // Updated Radius
+        const radius = 200; // Expanded Radius
 
         nodes.forEach((node, index) => {
             const angle = (index * 2 * Math.PI) / N;
@@ -184,21 +199,30 @@ export class BoardScene extends Scene {
     }
 
     private createCard(node: CardNode, x: number, y: number) {
-        const width = 140;
-        const height = 80; // Updated Height
+        const width = 160;
+        const height = 90;
 
         const container = this.add.container(x, y);
 
-        // Brutalist Card Background
-        const bg = this.add.rectangle(0, 0, width, height, 0x1a1f3a);
-        bg.setStrokeStyle(1, 0x00ff88, 1); // Updated Border
-        bg.setData('isCardBackground', true);
-        bg.setData('cardNode', node);
-        bg.setData('cardId', node.id);
+        // Card Shadow
+        const shadow = this.add.graphics();
+        shadow.fillStyle(0x000000, 0.4);
+        shadow.fillRoundedRect(-width / 2 + 4, -height / 2 + 4, width, height, 6);
 
-        // Make background interactive for dragging
-        bg.setInteractive({ useHandCursor: true });
-        this.input.setDraggable(bg);
+        // Card Background
+        const bg = this.add.graphics();
+        bg.fillStyle(0x1a1f2e, 1);
+        bg.fillRoundedRect(-width / 2, -height / 2, width, height, 6);
+        bg.lineStyle(2, 0x6366f1, 1);
+        bg.strokeRoundedRect(-width / 2, -height / 2, width, height, 6);
+        
+        // Use a transparent zone for interactions
+        const hitZone = this.add.zone(0, 0, width, height);
+        hitZone.setInteractive({ useHandCursor: true });
+        hitZone.setData('isCardBackground', true);
+        hitZone.setData('cardNode', node);
+        hitZone.setData('cardId', node.id);
+        this.input.setDraggable(hitZone);
 
         // Icon Header - Top Right Corner
         let iconStr = '📝';
@@ -206,44 +230,70 @@ export class BoardScene extends Scene {
         if (node.type === 'audio') iconStr = '🎙️';
 
         const typeLabel = this.add.text(width / 2 - 15, -height / 2 + 15, iconStr, {
-            fontSize: '14px',
+            fontSize: '18px',
+            color: '#ec4899'
         }).setOrigin(0.5);
+        typeLabel.setAlpha(0.8);
 
-        // Content Text (JetBrains Mono)
+        // Content Text
         const contentText = this.add.text(0, 0, node.title, { // Centered Title
-            fontFamily: '"JetBrains Mono", monospace',
-            fontSize: '14px', // Bigger font
-            fontStyle: 'bold', // Bold font
-            color: '#00ff88',
+            fontFamily: '"Inter", sans-serif',
+            fontSize: '14px',
+            fontStyle: 'bold',
+            color: '#f0f4f8',
             align: 'center',
             wordWrap: { width: width - 20, useAdvancedWrap: true }
         }).setOrigin(0.5);
 
-        // Connection Pin (Visible red dot at top center)
-        const pin = this.add.circle(0, -height / 2, 6, 0xff3366); // 12px circle = 6px radius
-        pin.setStrokeStyle(1, 0xffffff, 0.8);
+        // Connection Pin
+        const pin = this.add.circle(0, -height / 2, 7, 0xec4899); // 14px circle = 7px radius
         pin.setInteractive({ useHandCursor: true });
         
-        // Make the pin pulse/glow on hover
+        // Glow effect graphics for pin hover
+        const pinGlow = this.add.graphics();
+        pinGlow.setAlpha(0);
+        
         pin.on('pointerover', () => {
-            pin.setStrokeStyle(2, 0xffffff, 1);
-            pin.setScale(1.3); // Scale 1.3x
-            this.showPinTooltip(container.x, container.y - height / 2 - 20);
+            pin.setScale(1.2);
+            pinGlow.clear();
+            pinGlow.fillStyle(0xec4899, 0.4);
+            pinGlow.fillCircle(0, -height / 2, 12);
+            pinGlow.setAlpha(1);
+            this.showPinTooltip(container.x, container.y - height / 2 - 25);
         });
         pin.on('pointerout', () => {
-            pin.setStrokeStyle(1, 0xffffff, 0.8);
-            pin.setScale(1); // Reset Scale
+            pin.setScale(1);
+            pinGlow.setAlpha(0);
             this.hidePinTooltip();
         });
 
         // Hover effects on border glow
-        bg.on('pointerover', () => {
-            bg.setStrokeStyle(2.5, 0x00ff88, 1);
-            this.showTooltip(node, container.x, container.y - height / 2 - 10);
+        hitZone.on('pointerover', () => {
+            bg.clear();
+            bg.fillStyle(0x1a1f2e, 1);
+            bg.fillRoundedRect(-width / 2, -height / 2, width, height, 6);
+            bg.lineStyle(2, 0xec4899, 1); // Rose hover
+            bg.strokeRoundedRect(-width / 2, -height / 2, width, height, 6);
+            
+            shadow.clear();
+            shadow.fillStyle(0x000000, 0.6);
+            shadow.fillRoundedRect(-width / 2 + 6, -height / 2 + 6, width, height, 6);
+            
+            this.showTooltip(node, container.x, container.y - height / 2 - 15);
         });
 
-        bg.on('pointerout', () => {
-            bg.setStrokeStyle(1, 0x00ff88, 1); // Return to standard border
+        hitZone.on('pointerout', () => {
+            if (!this.isDrawingString) { // Don't reset if we are dragging strings or cards over it
+                bg.clear();
+                bg.fillStyle(0x1a1f2e, 1);
+                bg.fillRoundedRect(-width / 2, -height / 2, width, height, 6);
+                bg.lineStyle(2, 0x6366f1, 1);
+                bg.strokeRoundedRect(-width / 2, -height / 2, width, height, 6);
+                
+                shadow.clear();
+                shadow.fillStyle(0x000000, 0.4);
+                shadow.fillRoundedRect(-width / 2 + 4, -height / 2 + 4, width, height, 6);
+            }
             this.hideTooltip();
         });
 
@@ -254,7 +304,7 @@ export class BoardScene extends Scene {
             }
         });
 
-        container.add([bg, typeLabel, contentText, pin]);
+        container.add([shadow, bg, typeLabel, contentText, pinGlow, pin, hitZone]);
         this.cards.set(node.id, container);
     }
 
@@ -265,8 +315,8 @@ export class BoardScene extends Scene {
             this.currentTooltip.destroy();
         }
 
-        const width = 200; // Max width 200px
-        const container = this.add.container(x, y - 50); // Offset above the card
+        const width = 220; // Max width 220px
+        const container = this.add.container(x, y - 60); // Offset above the card
         container.setDepth(100); // Render above strings and pins
         container.alpha = 0; // Start faded out
 
@@ -275,20 +325,26 @@ export class BoardScene extends Scene {
         if (node.type === 'audio') iconStr = '🎙️';
 
         const contentText = this.add.text(0, 0, `${iconStr} ${node.title}\n\n${node.content}`, {
-            fontFamily: '"JetBrains Mono", monospace',
-            fontSize: '12px', // 12px Font
-            color: '#00ff88',
+            fontFamily: '"Inter", sans-serif',
+            fontSize: '12px',
+            color: '#cbd5e1',
             align: 'left',
             wordWrap: { width: width - 20, useAdvancedWrap: true }
         }).setOrigin(0.5, 1); // Origin bottom-center
 
         const bounds = contentText.getBounds();
-        const bg = this.add.rectangle(0, -bounds.height / 2, bounds.width + 16, bounds.height + 16, 0x0a0e27);
-        bg.setStrokeStyle(1, 0x00ff88, 1);
         
-        container.add([bg, contentText]);
+        // Arrow pointing down
+        const arrow = this.add.triangle(0, 8, 0, -8, 8, -8, 4, 0, 0x1a1f2e);
+        
+        const bg = this.add.graphics();
+        bg.fillStyle(0x1a1f2e, 1);
+        bg.fillRoundedRect(-bounds.width / 2 - 8, -bounds.height - 16, bounds.width + 16, bounds.height + 16, 6);
+        bg.lineStyle(1, 0x6366f1, 1);
+        bg.strokeRoundedRect(-bounds.width / 2 - 8, -bounds.height - 16, bounds.width + 16, bounds.height + 16, 6);
+        
+        container.add([bg, arrow, contentText]);
         this.currentTooltip = container;
-        this.activeCardId = node.id;
 
         this.tweens.add({
             targets: container,
@@ -301,7 +357,6 @@ export class BoardScene extends Scene {
         if (this.currentTooltip) {
             const tt = this.currentTooltip;
             this.currentTooltip = null;
-            this.activeCardId = null;
             this.tweens.add({
                 targets: tt,
                 alpha: 0,
@@ -321,11 +376,11 @@ export class BoardScene extends Scene {
         container.setDepth(101);
         
         const contentText = this.add.text(0, 0, "Drag from here to connect", {
-            fontFamily: '"JetBrains Mono", monospace',
-            fontSize: '10px',
-            color: '#0a0e27',
-            backgroundColor: '#ff3366',
-            padding: { x: 5, y: 3 },
+            fontFamily: '"Inter", sans-serif',
+            fontSize: '11px',
+            color: '#f0f4f8',
+            backgroundColor: '#ec4899',
+            padding: { x: 6, y: 4 },
             align: 'center'
         }).setOrigin(0.5, 1);
 
@@ -354,11 +409,29 @@ export class BoardScene extends Scene {
 
         // Line starts from card top center
         const startX = sourceCard.x;
-        const startY = sourceCard.y - 40;
+        const startY = sourceCard.y - 45; // Adjusted for 90px height
 
         this.previewLine.clear();
-        this.previewLine.lineStyle(2, 0xff3366, 0.8);
-        this.previewLine.strokeLineShape(new Phaser.Geom.Line(startX, startY, x, y));
+        this.previewLine.lineStyle(2, 0x6366f1, 0.8);
+        
+        // Dashed approximation for preview line
+        const distance = Phaser.Math.Distance.Between(startX, startY, x, y);
+        const dashLength = 10;
+        const dashGap = 5;
+        const numDashes = Math.floor(distance / (dashLength + dashGap));
+        const dx = (x - startX) / distance;
+        const dy = (y - startY) / distance;
+        
+        this.previewLine.beginPath();
+        for (let i = 0; i < numDashes; i++) {
+            const startDashX = startX + dx * (i * (dashLength + dashGap));
+            const startDashY = startY + dy * (i * (dashLength + dashGap));
+            const endDashX = startDashX + dx * dashLength;
+            const endDashY = startDashY + dy * dashLength;
+            this.previewLine.moveTo(startDashX, startDashY);
+            this.previewLine.lineTo(endDashX, endDashY);
+        }
+        this.previewLine.strokePath();
     }
 
     private finishDrawingString(pointer: Phaser.Input.Pointer) {
@@ -374,13 +447,20 @@ export class BoardScene extends Scene {
             if (cardId === this.sourceCardId) continue;
 
             const targetX = card.x;
-            const targetY = card.y - 40; // top center
+            const targetY = card.y - 45; // top center
 
             const distance = Phaser.Math.Distance.Between(pointer.worldX, pointer.worldY, targetX, targetY);
 
-            // Find the card background rectangle inside the container to check for pointer overlap
-            const bg = card.list.find(obj => obj.getData && obj.getData('isCardBackground')) as Phaser.GameObjects.Rectangle | undefined;
-            const isOverCardBody = bg ? bg.getBounds().contains(pointer.worldX, pointer.worldY) : false;
+            // Find the card hitZone inside the container to check for pointer overlap
+            const hitZone = card.list.find(obj => obj.getData && obj.getData('isCardBackground')) as Phaser.GameObjects.Zone | undefined;
+            
+            // To check bounds of a zone relative to world, we need to transform it
+            let isOverCardBody = false;
+            if (hitZone) {
+                const matrix = hitZone.getWorldTransformMatrix();
+                const bounds = new Phaser.Geom.Rectangle(matrix.tx - 80, matrix.ty - 45, 160, 90);
+                isOverCardBody = Phaser.Geom.Rectangle.Contains(bounds, pointer.worldX, pointer.worldY);
+            }
 
             if (distance < 45 || isOverCardBody) { // Snapping threshold or card body overlap
                 targetCardId = cardId;
@@ -418,7 +498,7 @@ export class BoardScene extends Scene {
             const cardB = this.cards.get(conn.clueB_id);
 
             if (cardA && cardB) {
-                const distance = getDistanceToSegment(x, y, cardA.x, cardA.y - 40, cardB.x, cardB.y - 40);
+                const distance = getDistanceToSegment(x, y, cardA.x, cardA.y - 45, cardB.x, cardB.y - 45);
 
                 if (distance < 10) { // 10px deletion tolerance
                     this.connections.splice(i, 1);
@@ -440,9 +520,9 @@ export class BoardScene extends Scene {
     public freezeBoard() {
         this.isFrozen = true;
         this.cards.forEach(card => {
-            const bg = card.list.find(obj => obj.getData && obj.getData('isCardBackground')) as Phaser.GameObjects.Rectangle;
-            if (bg) {
-                this.input.setDraggable(bg, false);
+            const hitZone = card.list.find(obj => obj.getData && obj.getData('isCardBackground')) as Phaser.GameObjects.Zone;
+            if (hitZone) {
+                this.input.setDraggable(hitZone, false);
             }
         });
         this.uiHintText?.setText('BOARD LOCKED — REVIEW YOUR THEORY');
@@ -454,19 +534,12 @@ export class BoardScene extends Scene {
         this.evidenceClueIds = null;
         this.missedEvidenceTweens.forEach(t => t.stop());
         this.missedEvidenceTweens = [];
-        this.cards.forEach(card => {
-            const bg = card.list.find(obj => obj.getData && obj.getData('isCardBackground')) as Phaser.GameObjects.Rectangle;
-            if (bg) {
-                bg.setStrokeStyle(0.5, 0x00ff88, 0.8);
-                bg.alpha = 1;
-            }
-        });
         // Re-enable dragging for backgrounds
         this.cards.forEach(card => {
-            const bg = card.list.find(obj => obj.getData && obj.getData('isCardBackground')) as Phaser.GameObjects.Rectangle;
-            if (bg) this.input.setDraggable(bg, true);
+            const hitZone = card.list.find(obj => obj.getData && obj.getData('isCardBackground')) as Phaser.GameObjects.Zone;
+            if (hitZone) this.input.setDraggable(hitZone, true);
         });
-        this.uiHintText?.setText('DRAG FROM RED PIN TO CONNECT | RIGHT-CLICK STRING TO DELETE');
+        this.uiHintText?.setText('DRAG FROM PINK PEG TO CONNECT | RIGHT-CLICK STRING TO DELETE');
         this.drawConnections();
     }
 
@@ -481,11 +554,17 @@ export class BoardScene extends Scene {
             if (!isConnected) {
                 const card = this.cards.get(evId);
                 if (card) {
-                    const bg = card.list.find(obj => obj.getData && obj.getData('isCardBackground')) as Phaser.GameObjects.Rectangle;
-                    if (bg) {
-                        bg.setStrokeStyle(3, 0xff3366, 1);
+                    // Draw red stroke via graphics instead
+                    const bgGraphics = card.list[1] as Phaser.GameObjects.Graphics; // Index 1 is the bg graphics
+                    if (bgGraphics) {
+                        bgGraphics.clear();
+                        bgGraphics.fillStyle(0x1a1f2e, 1);
+                        bgGraphics.fillRoundedRect(-80, -45, 160, 90, 6);
+                        bgGraphics.lineStyle(3, 0xef4444, 1);
+                        bgGraphics.strokeRoundedRect(-80, -45, 160, 90, 6);
+                        
                         const tween = this.tweens.add({
-                            targets: bg,
+                            targets: bgGraphics,
                             alpha: 0.5,
                             yoyo: true,
                             repeat: -1,
@@ -558,9 +637,9 @@ export class BoardScene extends Scene {
 
             if (cardA && cardB) {
                 const startX = cardA.x;
-                const startY = cardA.y - 40;
+                const startY = cardA.y - 45;
                 const endX = cardB.x;
-                const endY = cardB.y - 40;
+                const endY = cardB.y - 45;
 
                 const line = new Phaser.Geom.Line(startX, startY, endX, endY);
                 let distance = 100; // default no hover if frozen
@@ -575,29 +654,34 @@ export class BoardScene extends Scene {
                     
                     if (isAEvidence && isBEvidence) {
                         // Correct: GOLD and glow
-                        this.connectionsGraphics!.lineStyle(5, 0xffd700, 0.6);
+                        this.connectionsGraphics!.lineStyle(5, 0x10b981, 0.6); // Emerald glow
                         this.connectionsGraphics!.strokeLineShape(line);
-                        this.connectionsGraphics!.lineStyle(2, 0xffd700, 1);
+                        this.connectionsGraphics!.lineStyle(2, 0x10b981, 1);
                         this.connectionsGraphics!.strokeLineShape(line);
                     } else {
                         // Incorrect: RED, faded 30%
-                        this.connectionsGraphics!.lineStyle(2, 0xff3366, 0.3);
+                        this.connectionsGraphics!.lineStyle(2, 0xef4444, 0.3); // Red error
                         this.connectionsGraphics!.strokeLineShape(line);
                     }
                 } else {
                     // Normal game mode
                     if (distance < 10) {
                         // Glow connection string on hover
-                        this.connectionsGraphics!.lineStyle(5, 0x00ff88, 0.4);
+                        this.connectionsGraphics!.lineStyle(5, 0xfbbf24, 0.4); // Gold hover
                         this.connectionsGraphics!.strokeLineShape(line);
-                        this.connectionsGraphics!.lineStyle(2, 0x00ff88, 1);
+                        this.connectionsGraphics!.lineStyle(3, 0xfbbf24, 1);
                         this.connectionsGraphics!.strokeLineShape(line);
                     } else {
-                        // Normal red detective string
-                        this.connectionsGraphics!.lineStyle(2, 0xff3366, 0.85);
+                        // Normal indigo detective string
+                        this.connectionsGraphics!.lineStyle(2, 0x6366f1, 0.85); // Indigo
                         this.connectionsGraphics!.strokeLineShape(line);
                     }
                 }
+                
+                // Draw endpoint circles
+                this.connectionsGraphics!.fillStyle(0x6366f1, 1);
+                this.connectionsGraphics!.fillCircle(startX, startY, 3);
+                this.connectionsGraphics!.fillCircle(endX, endY, 3);
             }
         });
     }
