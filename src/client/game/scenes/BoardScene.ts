@@ -35,7 +35,8 @@ export class BoardScene extends Scene {
     private connectionsGraphics: Phaser.GameObjects.Graphics | null = null;
     private uiHintText: Phaser.GameObjects.Text | null = null;
     private currentTooltip: Phaser.GameObjects.Container | null = null;
-    private tooltipTimer: Phaser.Time.TimerEvent | null = null;
+    private currentPinTooltip: Phaser.GameObjects.Container | null = null;
+    private activeCardId: string | null = null;
     private isFrozen: boolean = false;
 
     constructor() {
@@ -94,6 +95,13 @@ export class BoardScene extends Scene {
                     container.x = startX + (pointer.worldX - pStartX);
                     container.y = startY + (pointer.worldY - pStartY);
                     this.drawConnections();
+
+                    // Tooltip follows card
+                    const cardId = gameObject.getData('cardId');
+                    if (this.currentTooltip && this.activeCardId === cardId) {
+                        this.currentTooltip.x = container.x;
+                        this.currentTooltip.y = container.y - 50;
+                    }
                 }
             }
         });
@@ -113,17 +121,10 @@ export class BoardScene extends Scene {
             }
         });
 
-        // Right-click deletion listener and tooltip clearing
-        this.input.on('pointerdown', (pointer: Phaser.Input.Pointer, currentlyOver: Phaser.GameObjects.GameObject[]) => {
+        // Right-click deletion listener
+        this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
             if (pointer.rightButtonDown()) {
                 this.handleRightClickDelete(pointer.worldX, pointer.worldY);
-            }
-            if (this.currentTooltip) {
-                const isOverCard = currentlyOver.some(obj => obj.getData && obj.getData('isCardBackground'));
-                if (!isOverCard) {
-                    this.currentTooltip.destroy();
-                    this.currentTooltip = null;
-                }
             }
         });
 
@@ -170,8 +171,8 @@ export class BoardScene extends Scene {
 
         const N = nodes.length;
         const centerX = 400;
-        const centerY = 270;
-        const radius = 170;
+        const centerY = 400; // Updated Center Y
+        const radius = 180; // Updated Radius
 
         nodes.forEach((node, index) => {
             const angle = (index * 2 * Math.PI) / N;
@@ -184,66 +185,66 @@ export class BoardScene extends Scene {
 
     private createCard(node: CardNode, x: number, y: number) {
         const width = 140;
-        const height = 90;
+        const height = 80; // Updated Height
 
         const container = this.add.container(x, y);
 
         // Brutalist Card Background
         const bg = this.add.rectangle(0, 0, width, height, 0x1a1f3a);
-        bg.setStrokeStyle(0.5, 0x00ff88, 0.8);
+        bg.setStrokeStyle(1, 0x00ff88, 1); // Updated Border
         bg.setData('isCardBackground', true);
+        bg.setData('cardNode', node);
+        bg.setData('cardId', node.id);
 
         // Make background interactive for dragging
         bg.setInteractive({ useHandCursor: true });
         this.input.setDraggable(bg);
 
-        // Icon Header
+        // Icon Header - Top Right Corner
         let iconStr = '📝';
         if (node.type === 'image') iconStr = '📸';
         if (node.type === 'audio') iconStr = '🎙️';
 
-        const typeLabel = this.add.text(0, -30, iconStr, {
+        const typeLabel = this.add.text(width / 2 - 15, -height / 2 + 15, iconStr, {
             fontSize: '14px',
         }).setOrigin(0.5);
 
         // Content Text (JetBrains Mono)
-        const contentText = this.add.text(0, 5, node.title, {
+        const contentText = this.add.text(0, 0, node.title, { // Centered Title
             fontFamily: '"JetBrains Mono", monospace',
-            fontSize: '11px',
+            fontSize: '14px', // Bigger font
+            fontStyle: 'bold', // Bold font
             color: '#00ff88',
             align: 'center',
             wordWrap: { width: width - 20, useAdvancedWrap: true }
         }).setOrigin(0.5);
 
         // Connection Pin (Visible red dot at top center)
-        const pin = this.add.circle(0, -height / 2, 6, 0xff3366);
+        const pin = this.add.circle(0, -height / 2, 6, 0xff3366); // 12px circle = 6px radius
         pin.setStrokeStyle(1, 0xffffff, 0.8);
         pin.setInteractive({ useHandCursor: true });
         
         // Make the pin pulse/glow on hover
         pin.on('pointerover', () => {
             pin.setStrokeStyle(2, 0xffffff, 1);
-            pin.setRadius(8);
+            pin.setScale(1.3); // Scale 1.3x
+            this.showPinTooltip(container.x, container.y - height / 2 - 20);
         });
         pin.on('pointerout', () => {
             pin.setStrokeStyle(1, 0xffffff, 0.8);
-            pin.setRadius(6);
+            pin.setScale(1); // Reset Scale
+            this.hidePinTooltip();
         });
 
         // Hover effects on border glow
         bg.on('pointerover', () => {
             bg.setStrokeStyle(2.5, 0x00ff88, 1);
+            this.showTooltip(node, container.x, container.y - height / 2 - 10);
         });
 
         bg.on('pointerout', () => {
-            bg.setStrokeStyle(0.5, 0x00ff88, 0.8);
-        });
-
-        // Tooltip on click
-        bg.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-            if (!pointer.rightButtonDown()) {
-                this.showTooltip(node, x, y);
-            }
+            bg.setStrokeStyle(1, 0x00ff88, 1); // Return to standard border
+            this.hideTooltip();
         });
 
         // String drawing start handlers
@@ -258,18 +259,16 @@ export class BoardScene extends Scene {
     }
 
     private showTooltip(node: CardNode, x: number, y: number) {
+        if (this.isFrozen) return; // Don't show tooltips when board is frozen to avoid clutter
+
         if (this.currentTooltip) {
             this.currentTooltip.destroy();
-            this.currentTooltip = null;
-        }
-        if (this.tooltipTimer) {
-            this.tooltipTimer.remove();
-            this.tooltipTimer = null;
         }
 
-        const width = 220;
-        const container = this.add.container(x, y - 80); // Offset above the card
+        const width = 200; // Max width 200px
+        const container = this.add.container(x, y - 50); // Offset above the card
         container.setDepth(100); // Render above strings and pins
+        container.alpha = 0; // Start faded out
 
         let iconStr = '📝';
         if (node.type === 'image') iconStr = '📸';
@@ -277,25 +276,68 @@ export class BoardScene extends Scene {
 
         const contentText = this.add.text(0, 0, `${iconStr} ${node.title}\n\n${node.content}`, {
             fontFamily: '"JetBrains Mono", monospace',
-            fontSize: '11px',
+            fontSize: '12px', // 12px Font
             color: '#00ff88',
             align: 'left',
             wordWrap: { width: width - 20, useAdvancedWrap: true }
-        }).setOrigin(0.5);
+        }).setOrigin(0.5, 1); // Origin bottom-center
 
         const bounds = contentText.getBounds();
-        const bg = this.add.rectangle(0, 0, bounds.width + 16, bounds.height + 16, 0x0a0e27);
+        const bg = this.add.rectangle(0, -bounds.height / 2, bounds.width + 16, bounds.height + 16, 0x0a0e27);
         bg.setStrokeStyle(1, 0x00ff88, 1);
         
         container.add([bg, contentText]);
         this.currentTooltip = container;
+        this.activeCardId = node.id;
 
-        this.tooltipTimer = this.time.delayedCall(3000, () => {
-            if (this.currentTooltip) {
-                this.currentTooltip.destroy();
-                this.currentTooltip = null;
-            }
+        this.tweens.add({
+            targets: container,
+            alpha: 1,
+            duration: 150
         });
+    }
+
+    private hideTooltip() {
+        if (this.currentTooltip) {
+            const tt = this.currentTooltip;
+            this.currentTooltip = null;
+            this.activeCardId = null;
+            this.tweens.add({
+                targets: tt,
+                alpha: 0,
+                duration: 150,
+                onComplete: () => tt.destroy()
+            });
+        }
+    }
+
+    private showPinTooltip(x: number, y: number) {
+        if (this.isFrozen) return;
+        if (this.currentPinTooltip) {
+            this.currentPinTooltip.destroy();
+        }
+
+        const container = this.add.container(x, y);
+        container.setDepth(101);
+        
+        const contentText = this.add.text(0, 0, "Drag from here to connect", {
+            fontFamily: '"JetBrains Mono", monospace',
+            fontSize: '10px',
+            color: '#0a0e27',
+            backgroundColor: '#ff3366',
+            padding: { x: 5, y: 3 },
+            align: 'center'
+        }).setOrigin(0.5, 1);
+
+        container.add([contentText]);
+        this.currentPinTooltip = container;
+    }
+
+    private hidePinTooltip() {
+        if (this.currentPinTooltip) {
+            this.currentPinTooltip.destroy();
+            this.currentPinTooltip = null;
+        }
     }
 
     private startDrawingString(cardId: string) {
@@ -312,7 +354,7 @@ export class BoardScene extends Scene {
 
         // Line starts from card top center
         const startX = sourceCard.x;
-        const startY = sourceCard.y - 45;
+        const startY = sourceCard.y - 40;
 
         this.previewLine.clear();
         this.previewLine.lineStyle(2, 0xff3366, 0.8);
@@ -332,7 +374,7 @@ export class BoardScene extends Scene {
             if (cardId === this.sourceCardId) continue;
 
             const targetX = card.x;
-            const targetY = card.y - 45; // top center
+            const targetY = card.y - 40; // top center
 
             const distance = Phaser.Math.Distance.Between(pointer.worldX, pointer.worldY, targetX, targetY);
 
@@ -376,7 +418,7 @@ export class BoardScene extends Scene {
             const cardB = this.cards.get(conn.clueB_id);
 
             if (cardA && cardB) {
-                const distance = getDistanceToSegment(x, y, cardA.x, cardA.y - 45, cardB.x, cardB.y - 45);
+                const distance = getDistanceToSegment(x, y, cardA.x, cardA.y - 40, cardB.x, cardB.y - 40);
 
                 if (distance < 10) { // 10px deletion tolerance
                     this.connections.splice(i, 1);
@@ -516,9 +558,9 @@ export class BoardScene extends Scene {
 
             if (cardA && cardB) {
                 const startX = cardA.x;
-                const startY = cardA.y - 45;
+                const startY = cardA.y - 40;
                 const endX = cardB.x;
-                const endY = cardB.y - 45;
+                const endY = cardB.y - 40;
 
                 const line = new Phaser.Geom.Line(startX, startY, endX, endY);
                 let distance = 100; // default no hover if frozen
