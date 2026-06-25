@@ -2,10 +2,19 @@ import { initTRPC, TRPCError } from '@trpc/server';
 import { cases } from '../shared/data/cases';
 import { Case } from '../shared/types';
 import { getRankProgress } from '../shared/utils/ranks';
+import { 
+  saveTheory, 
+  getPlayerProgress, 
+  getDailyTheories, 
+  upvoteTheory, 
+  getDailyLeaderboard 
+} from './core/persistence';
+import { checkAndAwardFlair } from './core/leaderboard';
 
 export type TRPCContext = {
   postId?: string;
   username?: string;
+  subredditName?: string;
   redis: {
     get(key: string): Promise<string | undefined>;
     set(key: string, value: string): Promise<string>;
@@ -15,6 +24,15 @@ export type TRPCContext = {
   };
   reddit: {
     getCurrentUsername(): Promise<string | undefined>;
+    setUserFlair(options: {
+      subredditName: string;
+      username: string;
+      text?: string;
+      flairTemplateId?: string;
+      cssClass?: string;
+      textColor?: 'light' | 'dark';
+      backgroundColor?: string;
+    }): Promise<void>;
   };
 };
 
@@ -149,15 +167,24 @@ export const appRouter = router({
       await ctx.redis.zAdd(`leaderboard:${input.caseId}`, { member: username, score: compositeScore });
       await ctx.redis.set(`leaderboard:display:${input.caseId}:${username}`, displayScore.toString());
 
-      const casesSolvedStr = await ctx.redis.get(`player:${username}:casesSolved`);
-      let casesSolved = casesSolvedStr ? parseInt(casesSolvedStr, 10) : 0;
-      
-      if (displayScore > 0) {
-          casesSolved += 1;
-          await ctx.redis.set(`player:${username}:casesSolved`, casesSolved.toString());
+      const isSolved = displayScore > 0;
+      const { progress, unlockedCard } = await saveTheory(
+        ctx.redis,
+        username,
+        dayNumber,
+        input.caseId,
+        input.theory,
+        displayScore,
+        input.connections,
+        isSolved
+      );
+
+      // Check and award flair if solved
+      if (isSolved && ctx.subredditName) {
+        await checkAndAwardFlair(ctx.reddit, ctx.subredditName, username, progress.casesSolved);
       }
 
-      const rankData = getRankProgress(casesSolved);
+      const rankData = getRankProgress(progress.casesSolved);
 
       return { 
           success: true, 
@@ -165,21 +192,23 @@ export const appRouter = router({
           evidenceConnected: maxEvidenceConnected, 
           totalEvidence: evidenceIds.size,
           rankData: {
-              casesSolved,
+              casesSolved: progress.casesSolved,
               ...rankData
-          }
+          },
+          unlockedCard
       };
     }),
 
   getPlayerProgress: publicProcedure
     .query(async ({ ctx }) => {
       const username = ctx.username || 'anonymous';
-      const casesSolvedStr = await ctx.redis.get(`player:${username}:casesSolved`);
-      const casesSolved = casesSolvedStr ? parseInt(casesSolvedStr, 10) : 0;
-      
-      const rankData = getRankProgress(casesSolved);
+      const progress = await getPlayerProgress(ctx.redis, username);
+      const rankData = getRankProgress(progress.casesSolved);
       return {
-          casesSolved,
+          casesSolved: progress.casesSolved,
+          rank: progress.rank,
+          evidenceCards: progress.evidenceCards,
+          theories: progress.theories,
           ...rankData
       };
     }),
@@ -216,6 +245,46 @@ export const appRouter = router({
           };
       }));
       return results;
+    }),
+
+  getTheories: publicProcedure
+    .input((val: unknown) => {
+      const data = val as any;
+      if (!data || typeof data.dayNumber !== 'number') throw new Error('Invalid input');
+      return { dayNumber: data.dayNumber as number };
+    })
+    .query(async ({ input, ctx }) => {
+      const theories = await getDailyTheories(ctx.redis, input.dayNumber);
+      return theories.sort((a, b) => b.votes - a.votes);
+    }),
+
+  upvoteTheory: publicProcedure
+    .input((val: unknown) => {
+      const data = val as any;
+      if (!data || typeof data.dayNumber !== 'number' || typeof data.theorySId !== 'string') {
+        throw new Error('Invalid input');
+      }
+      return {
+        dayNumber: data.dayNumber as number,
+        theorySId: data.theorySId as string,
+      };
+    })
+    .mutation(async ({ input, ctx }) => {
+      const username = ctx.username || 'anonymous';
+      if (username === 'anonymous') {
+        throw new TRPCError({ code: 'UNAUTHORIZED', message: 'You must be logged in to vote.' });
+      }
+      return await upvoteTheory(ctx.redis, input.dayNumber, input.theorySId, username);
+    }),
+
+  getDailyLeaderboard: publicProcedure
+    .input((val: unknown) => {
+      const data = val as any;
+      if (!data || typeof data.dayNumber !== 'number') throw new Error('Invalid input');
+      return { dayNumber: data.dayNumber as number };
+    })
+    .query(async ({ input, ctx }) => {
+      return await getDailyLeaderboard(ctx.redis, input.dayNumber);
     })
 });
 

@@ -4,7 +4,8 @@ import { EventBus } from '../game/EventBus';
 import { getCaseForDate } from '../../shared/utils/date';
 import { TheoryPanel } from './TheoryPanel';
 import { ResultPanel } from './ResultPanel';
-import { LeaderboardPanel } from './LeaderboardPanel';
+import { VotingPanel } from './VotingPanel';
+import { PlayerProfile } from './PlayerProfile';
 import { trpc } from '../utils/trpc';
 
 export const App: React.FC = () => {
@@ -17,9 +18,14 @@ export const App: React.FC = () => {
     const [gameState, setGameState] = useState<'loading' | 'playing' | 'postgame'>('loading');
     const [showResultPanel, setShowResultPanel] = useState(false);
     const [newCaseAvailable, setNewCaseAvailable] = useState(false);
+    const [profileOpen, setProfileOpen] = useState(false);
     
     // Data States
     const [postGameData, setPostGameData] = useState<any>(null);
+
+    // Fetch user profile info/init
+    const { data: initData } = trpc.init.useQuery();
+    const username = initData?.username ?? 'anonymous';
 
     // Fetch user's theory for today's case
     const { data: submissionData, isSuccess: theorySuccess } = trpc.getTheory.useQuery({ caseId: dailyCase.id });
@@ -91,7 +97,8 @@ export const App: React.FC = () => {
             evidenceConnected: data.evidenceConnected,
             totalEvidence: data.totalEvidence,
             theory: theory,
-            rankData: data.rankData
+            rankData: data.rankData,
+            unlockedCard: data.unlockedCard
         });
         
         EventBus.emit('show-results', { 
@@ -124,9 +131,19 @@ export const App: React.FC = () => {
 
             {/* Header Area */}
             <div className={`w-full max-w-5xl mb-4 flex flex-col gap-2 ${newCaseAvailable ? 'mt-8' : ''} z-10`}>
-                <h1 className="text-2xl font-bold tracking-wide text-[var(--text-primary)]">
-                    CASE #{dailyCase.dayNumber}: {dailyCase.title}
-                </h1>
+                <div className="flex justify-between items-center">
+                    <h1 className="text-2xl font-bold tracking-wide text-[var(--text-primary)]">
+                        CASE #{dailyCase.dayNumber}: {dailyCase.title}
+                    </h1>
+                    
+                    <button
+                        onClick={() => setProfileOpen(true)}
+                        className="px-4 py-1.5 bg-[#6366f1]/10 border border-[#6366f1] hover:bg-[#6366f1] text-[#f0f4f8] rounded text-xs font-bold uppercase transition-all flex items-center gap-2 shadow-md hover:shadow-[#6366f1]/20"
+                    >
+                        <span>👤</span>
+                        <span>My Dossier</span>
+                    </button>
+                </div>
                 
                 <div className="w-full border border-[var(--accent-primary)] rounded-md overflow-hidden bg-[var(--secondary-dark)]">
                     <button 
@@ -159,8 +176,8 @@ export const App: React.FC = () => {
             )}
 
             {gameState === 'postgame' && (
-                <LeaderboardPanel 
-                    caseId={dailyCase.id} 
+                <VotingPanel 
+                    dayNumber={dailyCase.dayNumber}
                     onViewResults={() => setShowResultPanel(true)} 
                 />
             )}
@@ -174,7 +191,15 @@ export const App: React.FC = () => {
                     totalEvidence={postGameData.totalEvidence}
                     playerConnections={connections}
                     rankData={postGameData.rankData}
+                    unlockedCard={postGameData.unlockedCard}
                     onClose={handleCloseResultPanel}
+                />
+            )}
+
+            {profileOpen && (
+                <PlayerProfile 
+                    username={username}
+                    onClose={() => setProfileOpen(false)}
                 />
             )}
         </div>

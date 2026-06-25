@@ -26,6 +26,7 @@ app.all('/api/trpc/*', async (c) => {
       return {
         postId: context.postId,
         username: username ?? 'anonymous',
+        subredditName: context.subredditName ?? 'caseboard_game_dev',
         redis,
         reddit,
       };

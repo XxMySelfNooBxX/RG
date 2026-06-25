@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { DailyCase } from '../../shared/types';
+import { COSMETIC_CARDS } from '../../shared/data/cosmetics';
 
 type ResultPanelProps = {
   caseData: DailyCase;
@@ -15,6 +16,7 @@ type ResultPanelProps = {
       progressPercent: number;
       casesToNext: number;
   };
+  unlockedCard?: string | null;
   onClose: () => void;
 };
 
@@ -26,6 +28,7 @@ export const ResultPanel: React.FC<ResultPanelProps> = ({
   totalEvidence,
   playerConnections,
   rankData,
+  unlockedCard,
   onClose
 }) => {
   const [timeLeft, setTimeLeft] = useState('');
@@ -114,6 +117,23 @@ export const ResultPanel: React.FC<ResultPanelProps> = ({
                 <div className="mt-auto">
                     <h2 className="font-bold text-2xl text-center p-4 border-2 border-[var(--gold)] rounded-md bg-[var(--gold)]/10 text-[var(--gold)] shadow-[0_0_15px_rgba(251,191,36,0.2)]">SCORE: {playerScore}</h2>
                 </div>
+                {unlockedCard && (() => {
+                    const cardInfo = COSMETIC_CARDS.find(c => c.id === unlockedCard);
+                    return (
+                        <div className="mt-4 p-4 border border-[#fbbf24] rounded-md bg-[#fbbf24]/5 text-center flex flex-col items-center shadow-md animate-pulse">
+                            <span className="text-[10px] text-[#fbbf24] font-black tracking-widest uppercase mb-1">🎉 NEW EVIDENCE CARD UNLOCKED 🎉</span>
+                            <span className="text-4xl my-1">{cardInfo?.emoji}</span>
+                            <span className="text-sm font-bold text-[#f0f4f8]">{cardInfo?.name}</span>
+                            <span className={`text-[10px] font-bold ${
+                                cardInfo?.rarity === 'Legendary' ? 'text-[#fbbf24]' :
+                                cardInfo?.rarity === 'Epic' ? 'text-[#ec4899]' :
+                                cardInfo?.rarity === 'Rare' ? 'text-[#6366f1]' : 'text-[#cbd5e1]'
+                            }`}>
+                                {cardInfo?.rarity} Card
+                            </span>
+                        </div>
+                    );
+                })()}
             </div>
 
             {/* Right Column */}
